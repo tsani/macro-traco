@@ -4,10 +4,10 @@ import { AnyEdible, Edible, Weight, NutritionFacts, Nutrient, QuantifiedWeight }
 import { RECIPE_WEIGHTS } from './constants';
 
 import {
-  getConsumerNutrients, 
-  getNutritionFacts, 
-  getSearchResults, 
-  getFoodWeights, 
+  getConsumerNutrients,
+  getNutritionFacts,
+  getSearchResults,
+  getFoodWeights,
   getNutrients,
 } from './api';
 import { isDef } from './util';
@@ -26,9 +26,9 @@ export function useNutritionFacts<Kind extends 'food' | 'recipe'>(
       if (!isDef(id) || !isDef(type) || !isDef(amount) || !isDef(seq_num)) return;
       if (amount < 0) return;
       const nutritionFacts = await getNutritionFacts({
-        id: id, 
-        type: type, 
-        seq_num: seq_num, 
+        id: id,
+        type: type,
+        seq_num: seq_num,
         amount: amount
       });
 
@@ -93,20 +93,57 @@ export function useNutrientSearch(search: string) {
   return nutrients;
 }
 
+function useParser<Src, Dst>(
+  initialSrc: Src,
+  dst: Dst,
+  setDst: (x: Dst) => void,
+  isSame: (x: Dst, y: Dst) => boolean,
+  parse: (x: Src) => Dst | null,
+): readonly [Src, (x: Src) => void] {
+  const [src, setSrc] = useState(initialSrc);
+  useEffect(() => {
+    const newDst = parse(src);
+    if (null !== newDst && !isSame(newDst, dst)) setDst(newDst);
+  }, [src, setDst]);
+  return [src, setSrc] as const;
+}
+
 /**
  * A wrapper around a string state that parses it to an int
  * and calls a given function each time the parse succeeds.
  * @param setInt The function to call when parsing as an int succeeds.
- * @returns 
+ * @returns
  */
-export function useIntParser(initialText: string, int: number, setInt: (x: number) => void) {
-  const [ text, setText ] = useState(initialText);
-  useEffect(() => {
-    const i = parseInt(text);
-    if (!isNaN(i) && int !== i) {
-      console.log(`parsed new int ${i}`);
-      setInt(i);
+export function useIntParser(
+  initialText: string,
+  int: number,
+  setInt: (x: number) => void,
+): readonly [string, (x: string) => void] {
+  return useParser(
+    initialText,
+    int,
+    setInt,
+    (x, y) => x === y,
+    (x) => {
+      const result = parseInt(x);
+      return isNaN(result) ? null : result;
+    },
+  );
+}
+
+export function useFloatParser(
+  initialText: string,
+  float: number,
+  setFloat: (x: number) => void,
+): readonly [string, (x: string) => void] {
+  return useParser(
+    initialText,
+    float,
+    setFloat,
+    (x, y) => x === y,
+    (x) => {
+      const result = parseFloat(x);
+      return isNaN(result) ? null : result;
     }
-  }, [text, setInt]);
-  return [text, setText] as const;
+  )
 }

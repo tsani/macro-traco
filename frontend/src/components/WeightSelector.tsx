@@ -6,7 +6,7 @@ import { Spinner } from './ui';
 import { Lens } from '../util';
 import { Weight, Setter } from '../types';
 import { QuantifiedWeightForm } from '../form';
-import { useIntParser } from '../hooks';
+import { useIntParser, useFloatParser } from '../hooks';
 
 interface WeightSelectorProps {
   handleFocus: (state: boolean) => void;
@@ -24,7 +24,7 @@ const WeightSelector =
       const [ amount, setAmount ] = lens.focus('amount');
       const [ seqNum, setSeqNum ] = lens.focus('seq_num');
 
-      const [ amountText, setAmountText ] = useIntParser('', amount ?? 0, (x) => setAmount(() => x));
+      const [ amountText, setAmountText ] = useFloatParser('', amount ?? 0, (x) => setAmount(() => x));
       const [ seqNumText, setSeqNumText ] = useIntParser('', seqNum ?? 0, (x) => setSeqNum(() => x));
 
       return (
