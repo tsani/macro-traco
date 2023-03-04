@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+source bin/activate
+DATABASE_PATH=../usda-data/usda.sql3 \
+    WEBPACK_DEV_SERVER_HOST=http://localhost:3000 \
+    FLASK_DEBUG=1 FLASK_ENV=dev \
+    exec python -m macro_traco "$@"
