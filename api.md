@@ -41,7 +41,7 @@ Returns the id of the newly created food.
 `/nutrients`
 -------------
 
-### GET -- retrieves documented micronutrients filtered by user input
+### GET -- retrieves documented nutrients filtered by user input
 
 Query string parameters:
 * `search`: returned nutrients must contain this as a substring
@@ -182,18 +182,20 @@ or
 ```
 { "type": "recipe", "id": <int> }
 ```
-and a `weight object` is
+
+The `type` field specifies how to interpret the `id` field.
+
+A `weight object` is
 ```
 { "amount": <float>, "seq_num": <int> }
 ```
-
-The `type` field specifies how to interpret the `id` field.
+and refers to a `seq_num` identifier for a specific weight associated with the food or recipe.
 
 Example request, for consuming a recipe
 ```
 { "consumer": "Eric",
   "edible": { "type": "recipe", "id": 1 },
-  "weight": { "amount": 1.5, "seq_num": 2,
+  "weight": { "amount": 1.5, "seq_num": 2 },
 }
 ```
 
