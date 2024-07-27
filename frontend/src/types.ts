@@ -16,8 +16,10 @@ export interface QuantifiedWeight {
     amount: number;
 }
 
+export type UnitName = string;
+
 export interface Unit {
-    name: string;
+    name: UnitName;
     gramEquivalent: number;
 }
 
@@ -29,7 +31,7 @@ export interface Nutrient {
     unit: string;
 }
 
-export type NutritionFacts = Record<NutrientName, [number, string]>
+export type NutritionFacts = Record<NutrientName, [number, UnitName]>
 
 export interface QuantifiedNutrient {
     id: number; // the ID of the nutrient
@@ -62,3 +64,21 @@ export type Endo<T> = (x : T) => T
 export type Setter<T> = (x: Endo<T>) => void;
 
 export type Component<Props> = (props: Props) => React.ReactElement;
+
+/** A record of macronutrients. */
+export interface Macros<T> {
+  protein: T;
+  carbs: T;
+  fat: T;
+}
+
+export type Energy = number;
+export type Fraction = number; // between 0 and 1.
+export type MacroSplit = Macros<[Fraction, Fraction]>; // a lo-hi range of the total fraction of energy consumed per macro
+export type MacroGoal = Macros<[Energy, Energy]>;
+
+export interface Consumer<T> {
+  jake: T;
+  eric: T;
+  test: T;
+}

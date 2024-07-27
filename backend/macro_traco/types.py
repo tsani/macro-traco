@@ -1,6 +1,6 @@
 class FoodNutFact:
-    def __init__(self, nut_facts):
-        self.nut_fact = nut_facts
+    def __init__(self, nut_facts=None):
+        self.nut_fact = {} if nut_facts is None else nut_facts
 
     def to_dict(self):
         return self.nut_fact.copy()
@@ -14,14 +14,19 @@ class FoodNutFact:
             else:
                 total[key] = other[key]
         return FoodNutFact(total)
+
     def __getitem__(self, key):
         return self.nut_fact[key]
+
     def __setitem__(self, key, value):
         self.nut_fact[key] = value
+
     def __str__(self):
         return str(self.nut_fact)
+
     def __repr__(self):
         return repr(self.nut_fact)
+
     def __mul__(self, multiplicand):
         new_dic = self.nut_fact.copy()
         for key in self.nut_fact:

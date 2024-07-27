@@ -39,19 +39,20 @@ export function useNutritionFacts<Kind extends 'food' | 'recipe'>(
   return nutrients;
 }
 
-export function useConsumerNutrients(consumer: string) {
-  const [ nutrients, setNutrients ] = useState({});
+export function useConsumerNutrients(consumer: string, date: Date | null = null): NutritionFacts {
+  const [ nutrients, setNutrients ] = useState<NutritionFacts>({});
 
   useEffect(() => {
     (async () => {
       if(!consumer) return;
-      const start = new Date();
-      start.setHours(4, 0, 0, 0)
-      const end = new Date();
-      end.setHours(28, 0, 0, 0)
+      const d = date ?? new Date();
+      const start = new Date(d);
+      start.setHours(8, 0, 0, 0)
+      const end = new Date(d);
+      end.setHours(32, 0, 0, 0)
       setNutrients(await getConsumerNutrients({ consumer, start, end }));
     })()
-  }, [consumer]);
+  }, [consumer, date]);
 
   return nutrients;
 }

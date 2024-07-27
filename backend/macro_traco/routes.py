@@ -3,6 +3,7 @@ from flask import (
     redirect, flash, session, abort, jsonify, g
 )
 
+from functools import reduce
 from datetime import datetime, timedelta
 import json
 import sys
@@ -37,14 +38,6 @@ def macros():
         ).to_dict()
     )
 
-@app.route('/recipes', methods=['POST'])
-def recipes():
-    recipe = request.json
-    if recipe is None:
-        return 'invalid POST body', 400
-    add_recipe(recipe)
-    return jsonify({})
-
 @app.route('/nutrients')
 def nutrients():
     name = request.args.get('search')
@@ -67,7 +60,7 @@ def nutrients():
 
     return jsonify(results)
 
-@app.route('/search')
+@app.route('/search', methods=['GET'])
 def search():
     search_for = request.args.get('for')
     if search_for is None:
@@ -80,9 +73,19 @@ def search():
 
     return jsonify({ 'results': results })
 
+@app.route('/recipes', methods=['POST'])
+def recipes():
+    """Creates a new recipe."""
+    recipe = request.json
+    if recipe is None:
+        return 'invalid POST body', 400
+    add_recipe(recipe)
+    return jsonify({})
+
 @app.route('/food', methods=['POST'])
 @db.with_cursor
 def food(cursor):
+    """Creates a new food."""
     body = request.json
     assert body is not None
 
@@ -128,13 +131,30 @@ def food(cursor):
 def weights(food_id):
     return jsonify(get_weights(int(food_id)))
 
+@app.route('/history', methods=['GET'])
+def history():
+    consumer = request.args['consumer']
+    strptime = lambda s: datetime.fromisoformat(s.replace('Z', '+00:00'))
+    date_start = strptime(request.args['start'])
+    date_end = strptime(request.args['end'])
+
+    return jsonify(list(
+        json.loads(x)
+        for x in
+        consumed_history(consumer, date_start, date_end)
+    ))
+
 @app.route('/eat', methods=['GET', 'POST'])
 def eat():
     if request.method == 'POST':
         return eat_post()
     else:
         assert request.method == 'GET'
-        return eat_get()
+        consumer = request.args['consumer']
+        strptime = lambda s: datetime.fromisoformat(s.replace('Z', '+00:00'))
+        date_start = strptime(request.args['start'])
+        date_end = strptime(request.args['end'])
+        return jsonify(sum_day_macro(consumer, date_start, date_end).to_dict())
 
 ### ROUTE IMPLEMENTATIONS #####################################################
 
@@ -147,12 +167,10 @@ def add_macro_traco(c, consumer, python_nutrients):
     app.logger.info('SQL query: %s with %s', query, str(params))
     c.execute(query, params)
 
-# this function will sum all the nutrients recorded on a certain day
-# paramaters: consumer, year, month, day
-def sum_day_macro(consumer, date_start, date_end):
-    """Calculates the total macros consumed by the given consumer between the
-    given time points."""
-
+def consumed_history(consumer, date_start, date_end):
+    """Generates a sequence of JSON-encoded strings representing what the given
+    consumer consumed between the given time points."""
+    result = []
     with db.cursor() as c:
         query = """SELECT nutrients_json FROM macro_traco
             WHERE timestamp BETWEEN (?) AND (?) AND consumer=(?)"""
@@ -160,16 +178,24 @@ def sum_day_macro(consumer, date_start, date_end):
         app.logger.info('SQL query %s with %s', query, str(params))
         c.execute(query, params)
 
-        # structure of vals: dict of string, tuple (float, string) pairs
-        # vals = {'nutrient' : (float amt, 'unit')}
-        total_day_nut_fact = FoodNutFact({})
-
         for row in c:
-            app.logger.debug('sum_day_macro: %s ate: %s', consumer, row[0])
-            days_nut_facts = FoodNutFact(json.loads(row[0]))
-            total_day_nut_fact += days_nut_facts
+            data = row[0]
+            app.logger.debug(f'[consumed_history] {consumer} ate {data}')
+            yield data
 
-    return total_day_nut_fact
+# this function will sum all the nutrients recorded on a certain day
+# paramaters: consumer, year, month, day
+def sum_day_macro(consumer, date_start, date_end):
+    """Calculates the total macros consumed by the given consumer between the
+    given time points."""
+    return reduce(
+        lambda x, y: x + y, (
+            FoodNutFact(json.loads(x))
+            for x in
+            consumed_history(consumer, date_start, date_end)
+        ),
+        FoodNutFact(),
+    )
 
 @db.with_cursor
 def get_weights(c, food_id):
@@ -352,13 +378,6 @@ def calculate_edible_nutrients(edible, weight):
         weight['amount']
     )
     return d
-
-def eat_get():
-    consumer = request.args['consumer']
-    strptime = lambda s: datetime.fromisoformat(s.replace('Z', '+00:00'))
-    date_start = strptime(request.args['start'])
-    date_end = strptime(request.args['end'])
-    return jsonify(sum_day_macro(consumer, date_start, date_end).to_dict())
 
 def eat_post():
     # keys: edible, weight, consumer (string)

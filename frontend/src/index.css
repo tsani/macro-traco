@@ -90,8 +90,11 @@ div.nutrient-list-item > * {
 }
 
 div.day-macros {
+    display: block;
+    /*
     display: flex;
     flex-flow: row wrap;
+    */
 }
 
 .card {
@@ -139,4 +142,32 @@ div.edible-selector {
 
 div.reference-quantity {
     margin: 1em 0;
+}
+
+div.macro-line {
+    width: 95%;
+    height: 1em;
+    border-bottom: 2px solid black;
+    border-right: 1px solid black;
+    padding-bottom: 1px;
+}
+
+div.macro-line > * {
+    height: 95%;
+}
+
+div.macro-line > .lo-percent {
+    border-right: 1px solid black;
+}
+
+div.macro-line > .protein {
+    background-color: red;
+}
+
+div.macro-line > .carbs {
+    background-color: blue;
+}
+
+div.macro-line > .fat {
+    background-color: yellow;
 }

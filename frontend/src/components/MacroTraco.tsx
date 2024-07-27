@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 import DayMacros from './DayMacros';
 import EatSomething from './EatSomething';
+import History from './History';
 
 import { Spinner }  from './ui';
 import { EnableIf } from './util';
@@ -15,6 +16,7 @@ export default function MacroTraco() {
   const [ submitting, setSubmitting ] = useState(false);
   const [ error, setError ] = useState(false);
   const [ counter, setCounter ] = useState(0);
+  const [ today, setToday ] = useState(new Date());
 
   const handleSubmit = (eatenForm: EatenForm<'food' | 'recipe'>) => {
     const eaten = validateEatenForm(eatenForm);
@@ -39,7 +41,7 @@ export default function MacroTraco() {
     return (
       <div>
         <h1>Macro-Traco</h1>
-        <DayMacros counter={counter} consumers={['jake', 'eric', 'test']}/>
+        <DayMacros date={today} counter={counter} consumers={['jake', 'eric', 'test']}/>
         <div>
           <h2> Eat something? </h2>
           <EnableIf condition={error}>
@@ -52,6 +54,7 @@ export default function MacroTraco() {
             resetEaten={() => setEaten({...EATEN_FORM()})}
           />
         </div>
+        <History consumer="jake" today={today} length={7} />
       </div>
     );
   }

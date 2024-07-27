@@ -6,6 +6,8 @@ interface NutritionFactsProps {
     nutrients: NutritionFacts
 }
 
+/** Views nutrition facts as a 2-column table with nutrient name on the left and amount on the
+ * right. */
 export default function NutritionFactsView({ nutrients }: NutritionFactsProps) {
   if (!nutrients) return null;
 

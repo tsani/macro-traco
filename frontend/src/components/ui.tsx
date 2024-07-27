@@ -1,12 +1,13 @@
 import React, { HTMLAttributes, InputHTMLAttributes, useState } from 'react';
 
 import dynamicListWidget from './dynamic-list-widget';
-export { dynamicListWidget };
 
 import dynamicSelector from './dynamic-selector';
-export { dynamicSelector };
 
 import { Setter } from '../types';
+
+export { dynamicSelector };
+export { dynamicListWidget };
 
 export function Spinner() {
   return <span className="lds-dual-ring"></span>;
