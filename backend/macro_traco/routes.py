@@ -32,10 +32,10 @@ def macros():
         'amount': float(request.args.get('amount')),
     }
     return jsonify(
-        calculate_edible_nutrients(
+        calculate_edible_nutrients_and_weight(
             edible,
             weight,
-        ).to_dict()
+        )[0].to_dict()
     )
 
 @app.route('/nutrients')
@@ -180,7 +180,6 @@ def consumed_history(consumer, date_start, date_end):
 
         for row in c:
             data = row[0]
-            app.logger.debug(f'[consumed_history] {consumer} ate {data}')
             yield data
 
 # this function will sum all the nutrients recorded on a certain day
@@ -214,7 +213,7 @@ def get_weights(c, food_id):
         ],
     }
 
-def calculate_nutrients(food_id, seq_num, factor):
+def calculate_food_nutrients_and_weight(food_id, seq_num, factor):
     """Calculates the nutrients in a given quantity of a food.
 
     This allows requests like "what are the nutrients in 2 cups of milk?"
@@ -246,7 +245,10 @@ def calculate_nutrients(food_id, seq_num, factor):
         AND nutrient.id = common_nutrient.id
         """, (scaled_gm_w * factor, food_id))
 
-        return FoodNutFact({ row[0]: (row[2], row[1]) for row in cursor })
+        return (
+            FoodNutFact({ row[0]: (row[2], row[1]) for row in cursor }),
+            scaled_gm_w * factor,
+        )
 
 def seq_weight_in_g(food_id, seq_num):
     """Gets the weight in grams of one unit of weight specified by `seq_num`
@@ -268,10 +270,10 @@ def seq_weight_in_g(food_id, seq_num):
             return row[0]
 
 @db.with_cursor
-def calculate_recipe_nutrients(cursor, recipe_id, seq_num, factor):
+def calculate_recipe_nutrients_and_weight(cursor, recipe_id, seq_num, factor):
     """Calculates the total nutrients of a given amount of a recipe.
     The amount of the recipe is specified as a seq_num (identifying a unit of
-    measure) together with `factor`, a found of how many such units.
+    measure) together with `factor`, a count of how many such units.
     """
     cursor.execute("""
     SELECT food_id, amount, seq_num, display_unit
@@ -282,102 +284,107 @@ def calculate_recipe_nutrients(cursor, recipe_id, seq_num, factor):
     total_recipe_weight = 0
 
     for row in cursor:
-        scaled_gm_w = seq_weight_in_g(row[0], row[2]) * row[1]
-        ingredient_nut_fact = \
-            calculate_nutrients(
+        ingredient_nut_fact, ingredient_weight = \
+            calculate_food_nutrients_and_weight(
                 row[0], row[2], row[1])
+        app.logger.debug(
+            '[calculate_recipe_nutrients_and_weight] '
+            f'{ingredient_nut_fact.to_dict()} @ {ingredient_weight}',
+        )
         if ingredient_nut_fact is None:
             return None # invalid food was given
 
-        total_recipe_weight += scaled_gm_w
+        total_recipe_weight += ingredient_weight
         total_recipe_nut_fact += ingredient_nut_fact
 
-    if seq_num == 0: #looking to calculate macros as weight of recipe
-        ratio = factor / total_recipe_weight
-        return total_recipe_nut_fact * ratio
-    else:
-        return total_recipe_nut_fact * factor
-    # To calculate the nutrients for a recipe, you crucially need to
-    # know the total weight of the recipe.
-    # You can adjust `calculate_nutrients` so it returns the
-    # total consumed weight of the food as a by-product.
-    # This will make calculating the total weight of the recipe easier
-    # in here.
+    cursor.execute("""
+    SELECT child_id, seq_num, amount
+    FROM `meta_recipe`
+    WHERE parent_id = (?)""", (recipe_id,))
 
-# test recipe for the function following
-test_recipe = {
-    "name":"chicken dinner",
-    "ingredients":[
-        {"food_id":10001,
-         "amount":1,
-         "seq_num":3,
-         "display_unit":"cup"
-         },
-        {"food_id":10002,
-         "amount":3,
-         "seq_num":8,
-         "display_unit":"cup"
-         }]
-    }
+    for row in cursor:
+        nut_fact, ingredient_weight = \
+            calculate_recipe_nutrients_and_weight(row[0], row[1], row[2])
+        total_recipe_nut_fact += nut_fact
+        total_recipe_weight += ingredient_weight
+
+    if seq_num == 0: # recipe weight (factor) is in grams
+        ratio = factor / total_recipe_weight
+        return total_recipe_nut_fact * ratio, factor
+    elif seq_num == -1: # recipe weight is a fraction of its total weight
+        return total_recipe_nut_fact * factor, factor * total_recipe_weight
+    else:
+        raise RuntimeError('recipe seq_num can only be 0 or -1')
 
 # inserts a new json recipe into the DB, including ingredients
-def add_recipe(recipe):
+@db.with_transaction
+@db.with_cursor
+def add_recipe(c, recipe):
     recipe_name = recipe["name"]
 
-    with db.transaction():
-        with db.cursor() as c:
-            c.execute("BEGIN")
-            query = "INSERT INTO recipe (name) VALUES (?)"
-            params = (recipe_name,)
-            app.logger.info(
-                "SQL query: %s with %s",
-                query,
-                str(params),
+    c.execute("BEGIN")
+    query = "INSERT INTO recipe (name) VALUES (?)"
+    params = (recipe_name,)
+    app.logger.info(
+        "SQL query: %s with %s",
+        query,
+        str(params),
+    )
+    c.execute(query, params)
+    recipe_id = c.lastrowid
+
+    for ingredient in recipe["ingredients"]:
+        if not ingredient['edible']: continue
+        if ingredient['edible']['type'] == 'food':
+            query = """INSERT INTO ingredient
+                (recipe_id, food_id, amount, seq_num, display_unit)
+                VALUES (?, ?, ?, ?, ?)
+            """
+            params = (recipe_id,
+                ingredient['edible']["id"],
+                ingredient['weight']["amount"],
+                ingredient['weight']["seq_num"],
+                '',
             )
-            c.execute(query, params)
-            recipe_id = c.lastrowid
+        elif ingredient['edible']['type'] == 'recipe':
+            query = """INSERT INTO meta_recipe
+            (parent_id, child_id, amount, seq_num, display_unit)
+            VALUES (?, ?, ?, ?, ?)"""
+            params = (recipe_id,
+                ingredient['edible']['id'],
+                ingredient['weight']['amount'],
+                ingredient['weight']['seq_num'],
+                '',
+            )
+        else:
+            raise RuntimeError('edible type must be `recipe` or `food`')
 
-            for ingredient in recipe["ingredients"]:
-                if not ingredient['edible']: continue
-                assert ingredient['edible']['type'] == 'food'
-                query = """INSERT INTO ingredient
-                    (recipe_id, food_id, amount, seq_num, display_unit)
-                    VALUES (?, ?, ?, ?, ?)
-                """
-                params = ( recipe_id,
-                    ingredient['edible']["id"],
-                    ingredient['weight']["amount"],
-                    ingredient['weight']["seq_num"],
-                    '',
-                )
-                app.logger.info(
-                    "SQL query: %s with %s",
-                    query,
-                    str((recipe_name,)),
-                )
-                c.execute(
-                    query,
-                    params
-                )
+        app.logger.info(
+            "SQL query: %s with %s",
+            query,
+            str((recipe_name,)),
+        )
+        c.execute(query, params)
 
-def calculate_edible_nutrients(edible, weight):
+    c.execute('COMMIT')
+
+def calculate_edible_nutrients_and_weight(edible, weight):
     """Calculates nutrients for a given quantity of an edible (either
-    a recipe or a food).
-    Returns a FoodNutFact.
+    a recipe or a food). Also computes the given weight of the edible in grams.
+    Returns a tuple of a FoodNutFact and an integer.
     """
     f = None
     if(edible['type'] == 'food'):
-        f = calculate_nutrients
+        f = calculate_food_nutrients_and_weight
     else:
         assert edible['type'] == 'recipe'
-        f = calculate_recipe_nutrients
+        f = calculate_recipe_nutrients_and_weight
 
-    d = f(
+    return f(
         edible['id'],
         weight['seq_num'],
         weight['amount']
     )
-    return d
 
 def eat_post():
     # keys: edible, weight, consumer (string)
@@ -393,7 +400,7 @@ def eat_post():
         str(eaten['weight']),
     )
 
-    nut = calculate_edible_nutrients(
+    nut, _weight = calculate_edible_nutrients_and_weight(
         eaten['edible'],
         eaten['weight']
     )

@@ -41,3 +41,11 @@ def with_cursor(wrapped):
 def transaction():
     with get_db():
         yield
+
+def with_transaction(wrapped):
+    """Decorates a function so it performs a transaction."""
+    def wrapper(*args, **kwargs):
+        with transaction():
+            return wrapped(*args, **kwargs)
+    wrapper.__name = wrapped.__name__
+    return wrapper
