@@ -64,7 +64,7 @@ Next steps:
 ## Syntax (Parser: TODO)
 
 ```
-Statement stmt ::= qfood "=" expr | qfood "weighs" number weight
+Statement stmt ::= "eval" expr | qfood "=" (expr | number weight food?)
 Quantified Food qfood ::= number unit food
 Expressions expr ::= qfood | expr "+" expr
 Nutrient nut ::= "fat" | "protein" | "carbs" | "sodium" | "potassium" | ...
