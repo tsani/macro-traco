@@ -1,23 +1,54 @@
 from .syntax import *
 
-from parsy import generate, string, regex, alt, seq, char_from, digit
+from parsy import generate, string, regex, alt, seq, char_from, digit, fail
 
-space = string(' ')
+def file(f):
+    """Parses an entire file. Emits a sequnce of Stmt objects."""
+    contents = f.read() # XXX find a way to avoid buffering the whole file
+    return (junk >> stmt.many()).parse(contents)
 
-lexeme = lambda p: p << space.many()
+def line(line: str):
+    """Parses one statement."""
+    return (junk >> stmt).parse(line)
+
+### LEXING ############################################################
+
+space = char_from(' \t\n\r')
+lexeme = lambda p: p << junk
+
+line_comment = (string('#') << regex('[^\n]*') << space.many()).many()
+
+junk = space.many() << line_comment.optional()
+
 point = string('.')
 digits = digit.at_least(1).concat()
 
-number = (digits + (point + digits).optional(default='.')) \
-    .map(lambda parts: ''.join(parts)) \
+number = lexeme(
+    (digits + (point + digits).optional(default='.'))
+    .map(lambda parts: ''.join(parts))
     .map(float)
-number = lexeme(number).desc('number')
+).desc('number')
 
 operator = lambda c: lexeme(string(c))
+
+@generate
+def string_literal():
+    name = yield alt(string('\''), string('"'))
+    body = yield regex(f'[^{name}]+')
+    yield string(name)
+    return body
+
+ident = alt(
+    regex('[a-zA-Z][0-9a-zA-Z]*').desc('bare name'),
+    string_literal.desc('quoted name'),
+)
+ident = lexeme(ident)
 
 add_op = operator("+").map(lambda _: lambda y: lambda x: x + y).desc('plus')
 mul_op = operator("*").map(lambda _: lambda y: lambda x: x * y).desc('times')
 div_op = operator("/").map(lambda _: lambda y: lambda x: x / y).desc('slash')
+
+### ARITHMETIC ############################################################
 
 @generate('arithmetic expression')
 def arith():
@@ -39,42 +70,57 @@ factor = number | (operator("(") >> arith << operator(")")).desc(
     'parenthesized expression',
 )
 
-quote = {
-    'single': string("'"),
-    'double': string('"'),
-}
+### FOOD EXPRESSIONS ##########################################################
 
-@generate
-def string_literal():
-    pquote = lambda name: quote[name].tag(name)
-    (name, _) = yield alt(pquote('single'), pquote('double'))
-    body = yield (space | regex('[0-9a-zA-Z]')).until(quote[name]).concat()
-    yield quote[name]
-    return body
-
-ident = alt(
-    regex('[a-zA-Z][0-9a-zA-Z]*').desc('bare name'),
-    string_literal.desc('quoted name'),
+quantity = seq(arith, ident).mark().combine(
+    lambda start, x, end: Quantity(
+        count=x[0],
+        unit=x[1],
+        location=SourceSpan(start, end),
+    ),
 )
-ident = lexeme(ident)
-
-quantity = seq(arith, ident).combine(Quantity)
-quantified_food = seq(quantity, ident).combine(QuantifiedFood)
+quantified_food = seq(quantity, ident).mark().combine(
+    lambda start, x, end: QuantifiedFood(
+        quantity=x[0],
+        food=x[1],
+        location=SourceSpan(start, end),
+    ),
+)
 expr = quantified_food.sep_by(operator('+'), min=1)
+bullet_expr = (operator('-') >> expr).at_least(1).map(
+    lambda xss: [x for xs in xss for x in xs]
+)
 
 @generate
 def definition_stmt():
     lhs = yield quantified_food
-    yield operator('=')
-    rhs = yield expr | quantity
+    weight = yield (operator('weighs') >> quantity).optional()
+    op = yield operator('=') | operator(':')
 
-    match rhs:
-        case Quantity():
-            rhs = [QuantifiedFood(rhs, lhs.food)]
+    if op == '=':
+        rhs = yield expr | quantity
 
-    if len(rhs) == 1 and rhs[0].food == lhs.food:
-        return WeightStmt(lhs, rhs[0])
-    else:
-        return FoodStmt(lhs, rhs)
+        match rhs:
+            case Quantity():
+                rhs = [QuantifiedFood(rhs, lhs.food)]
 
-stmt = (operator('eval') >> expr.map(EvalStmt)) | definition_stmt
+        if len(rhs) == 1 and rhs[0].food == lhs.food:
+            if weight is not None:
+                yield fail('unit definition forbids a `weighs` clause')
+            return WeightStmt(lhs, rhs[0])
+        else:
+            return FoodStmt(lhs, weight, rhs)
+
+    if op == ':':
+        rhs = yield bullet_expr
+        return FoodStmt(lhs, weight, rhs)
+
+stmt_ = alt(
+    operator('print') >> expr.map(PrintStmt),
+    definition_stmt
+)
+
+def span_stmt(start, stmt, end):
+    stmt.location = SourceSpan(start, end)
+    return stmt
+stmt = stmt_.mark().combine(span_stmt)

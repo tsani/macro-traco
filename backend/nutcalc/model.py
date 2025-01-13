@@ -11,6 +11,10 @@ class Unit:
     name: UnitName
     gram_equivalent: float
 
+    @staticmethod
+    def is_weight(x: Unit | str):
+        return (x in WEIGHTS) or (getattr(x, 'name', '') in WEIGHTS)
+
 FoodName = NewType('FoodName', str)
 
 @dataclass
@@ -32,7 +36,7 @@ class Nutrient:
 
     @property
     def units(self):
-        return [self.natural_unit]
+        return [WEIGHTS[self.natural_unit]]
 
     @property
     def reference_quantity(self):
@@ -74,7 +78,7 @@ class CompoundFood:
         scale_factor = 100 / (reference.count * reference_unit.gram_equivalent)
         food = CompoundFood(
             name=name,
-            units=units,
+            units=list(units),
             constituents=[food*scale_factor for food in constituents],
         )
         return food
@@ -126,6 +130,12 @@ class CompoundFood:
         for constituent in self.constituents:
             nut += constituent.nutrition_facts
         return nut
+
+    def define_unit(self, qty: Quantity, reference: Quantity):
+        """Defines a new unit, expressed as a quantity, as a computed ratio
+        with a reference quantity using an existing unit."""
+        w = reference.weigh(self)
+        self.units.append(Unit(name=qty.unit, gram_equivalent=w / qty.count))
 
 Food = Nutrient | CompoundFood
 
@@ -228,7 +238,8 @@ class NutritionFacts:
         rows = []
         rows.append(f'energy: {Quantity(self.energy, "kcal")}')
         for k in (n.name for n in ALL_NUTRIENTS):
-            rows.append(f'{k}: {self.data[k]}')
+            if k in self.data:
+                rows.append(f'{k}: {self.data[k]}')
         return '\n'.join(rows)
 
 def nutrition_facts(q: Quantity, food: Food):
@@ -242,8 +253,10 @@ def nutrition_facts(q: Quantity, food: Food):
 G = Unit(name=UnitName('g'), gram_equivalent=1)
 KG = Unit(name=UnitName('kg'), gram_equivalent=1000)
 MG = Unit(name=UnitName('mg'), gram_equivalent=0.001)
+MCG = Unit(name=UnitName('mcg'), gram_equivalent=0.000001)
 OZ = Unit(name=UnitName('oz'), gram_equivalent=28)
 LB = Unit(name=UnitName('lb'), gram_equivalent=454)
+IU = Unit(name=UnitName('IU'), gram_equivalent=0)
 
 ALL_WEIGHTS = [G, KG, MG, OZ, LB]
 WEIGHTS = { w.name: w for w in ALL_WEIGHTS }
@@ -252,7 +265,29 @@ PROTEIN = Nutrient(name=FoodName('protein'), energy=4, natural_unit=G.name)
 CARBS = Nutrient(name=FoodName('carbs'), energy=4, natural_unit=G.name)
 FAT = Nutrient(name=FoodName('fat'), energy=9, natural_unit=G.name)
 
+MILLI_MINERALS = [
+    Nutrient(FoodName(name), 0, MG.name)
+    for name in
+    [ 'calcium', 'iron', 'magnesium', 'phosphorus', 'potassium', 'sodium'
+    , 'zinc', 'copper', 'flouride', 'manganese', 'VitC', 'VitE', 'riboflavin'
+    , 'niacin', 'cholesterol'
+    ]
+]
+
+MICRO_MINERALS = [
+    Nutrient(FoodName(name), 0, MCG.name)
+    for name in
+    [ 'selenium', 'carotene', 'folate' ]
+]
+
+VITAMINS = [
+    Nutrient(FoodName(name), 0, IU.name)
+    for name in
+    [ 'VitA', 'VitD', 'VitB6', 'VitB12', 'VitK' ]
+]
+
 MACRONUTRIENTS = [PROTEIN, FAT, CARBS]
-ALL_NUTRIENTS = MACRONUTRIENTS
+ALL_NUTRIENTS = MACRONUTRIENTS + [Nutrient(FoodName('water'), 0, G.name)] + \
+    MILLI_MINERALS + MICRO_MINERALS + VITAMINS
 
 NUTRIENTS = { nut.name: nut for nut in ALL_NUTRIENTS }
