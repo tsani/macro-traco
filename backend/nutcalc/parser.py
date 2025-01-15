@@ -91,6 +91,8 @@ bullet_expr = (operator('-') >> expr).at_least(1).map(
     lambda xss: [x for xs in xss for x in xs]
 )
 
+### STATEMENTS ################################################################
+
 @generate
 def definition_stmt():
     lhs = yield quantified_food
@@ -116,8 +118,13 @@ def definition_stmt():
         return FoodStmt(lhs, weight, rhs)
 
 stmt_ = alt(
-    operator('print') >> expr.map(PrintStmt),
-    definition_stmt
+    (operator('print') >> expr).mark().combine(
+        lambda start, e, end: PrintStmt(e, location=SourceSpan(start, end))
+    ),
+    (operator('import') >> ident).mark().combine(
+        lambda start, e, end: ImportStmt(e, location=SourceSpan(start, end)),
+    ),
+    definition_stmt,
 )
 
 def span_stmt(start, stmt, end):

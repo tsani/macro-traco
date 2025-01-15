@@ -31,6 +31,12 @@ class PrintStmt:
 
     location: SourceSpan | None = None
 
+@dataclass
+class ImportStmt:
+    path: str
+
+    location: SourceSpan | None = None
+
 # @dataclass
 # class EatStmt:
 #     body: Expr
@@ -39,7 +45,7 @@ class PrintStmt:
 # class SleepStmt:
 #     pass
 
-Stmt = FoodStmt | WeightStmt | PrintStmt
+Stmt = FoodStmt | WeightStmt | PrintStmt | ImportStmt
 
 @dataclass
 class Quantity:

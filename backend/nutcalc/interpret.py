@@ -71,7 +71,7 @@ class Interpreter:
             case syntax.PrintStmt():
                 self._print_stmt(stmt)
             case _:
-                assert false, 'all statement types are handled'
+                assert False, f'statement {stmt} is handled'
 
     ##########################################################################
 
