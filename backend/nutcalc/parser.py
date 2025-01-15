@@ -86,9 +86,13 @@ quantified_food = seq(quantity, ident).mark().combine(
         location=SourceSpan(start, end),
     ),
 )
-expr = quantified_food.sep_by(operator('+'), min=1)
+expr = quantified_food.sep_by(operator('+'), min=1).mark().combine(
+    lambda start, body, end: Expr(body, location=SourceSpan(start, end)),
+)
 bullet_expr = (operator('-') >> expr).at_least(1).map(
     lambda xss: [x for xs in xss for x in xs]
+).mark().combine(
+    lambda start, body, end: Expr(body, location=SourceSpan(start, end)),
 )
 
 ### STATEMENTS ################################################################

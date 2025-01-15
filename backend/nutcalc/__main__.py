@@ -27,6 +27,7 @@ def parse_and_execute(interpreter, path):
                 ospath.join(ospath.dirname(path), stmt.path + '.nut'),
             )
         for stmt in stmts:
+            stmt.filename = path
             interpreter.execute(stmt)
 
 try:

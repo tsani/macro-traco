@@ -12,8 +12,10 @@ class InterpretationError(RuntimeError):
         super().__init__(self, **kwargs)
 
     def __str__(self):
-        return f'{self.location.start[0]+1}:{self.location.start[1]}: ' \
-            f'{self.msg}' if self.location is not None else msg
+        if self.location is None:
+            return self.msg
+        else:
+            return self.location.as_prefix() + self.msg
 
 ###############################################################################
 
